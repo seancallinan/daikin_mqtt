@@ -16,21 +16,49 @@ class Daikin:
 
     def get_status(self):
         param_stat = '{"requests":[{"op":2, "to":"/dsiot/edge/adr_0100.dgc_status?filter=pv"}]}'
+        param_stat_energy = '{"requests":[{"op":2, "to":"/dsiot/edge/adr_0100.i_power.week_power?filter=pv,pt,md"}]}'
+        
         try: 
             r = requests.post(self.url, param_stat)
+            r_energy = requests.post(self.url, param_stat_energy)
         except requests.exceptions.RequestException as e:
             print("{}: Cannot connect to AC unit".format(datetime.datetime.now()))
             return False
         data = r.json()
-        #print(data)
-        self.temperature = int(json.dumps(data["responses"][0]["pc"]["pch"][2]["pch"][5]["pch"][0]["pv"]).strip('"'), 16) #Tempterature
-        self.humidity = int(json.dumps(data["responses"][0]["pc"]["pch"][2]["pch"][5]["pch"][1]["pv"]).strip('"'), 16) #Humidity
-        e_A002 = json.dumps(data["responses"][0]["pc"]["pch"][2]["pch"][3]["pch"][0]["pv"])
+        data_energy = r_energy.json()
+
+        # Check if returned message is incomplete        
+#Old messages v2.x
+#            self.temperature = int(json.dumps(data['responses'][0]['pc']['pch'][2]['pch'][5]['pch'][0]['pv']).strip('\''), 16) #Tempterature
+#            print("Temperature:", self.temperature)
+#            self.humidity = int(json.dumps(data["responses"][0]["pc"]["pch"][2]["pch"][5]["pch"][1]["pv"]).strip('"'), 16) #Humidity
+#            print(" Humidity:", self.humidity)
+#            self.energy = int(json.dumps(data_energy["responses"][0]["pc"]["pch"][1]["pv"][6]))
+
+
+
+        try:
+#            self.temperature = int(json.dumps(data["responses"][0]["pc"]["pch"][2]["pch"][5]["pch"][0]["pv"]).strip('"'), 16) #Tempterature
+#            print("Try:")
+#            test = json.dumps(data["responses"][0]["pc"]["pch"][3]['pch'][5]['pch'][0]['pv'])
+#            print("Test: ",test, "\n")
+            self.temperature = int(json.dumps(data["responses"][0]["pc"]["pch"][3]["pch"][5]["pch"][0]["pv"]).strip('"'), 16) #Tempterature
+#            print("Temperature:", self.temperature)
+            self.humidity = int(json.dumps(data["responses"][0]["pc"]["pch"][3]["pch"][5]["pch"][1]["pv"]).strip('"'), 16) #Humidity
+#            print(" Humidity:", self.humidity)
+            self.energy = int(json.dumps(data_energy["responses"][0]["pc"]["pch"][1]["pv"][6]))
+            e_A002 = json.dumps(data["responses"][0]["pc"]["pch"][3]["pch"][3]["pch"][0]["pv"])
+        except KeyError:
+            print ("{}: Incomplete response:".format(datetime.datetime.now()), data)
+            return False
+            
+        #print("Energy:",self.energy)
+        
         p = {} #"p_**" of e_3001 is registered in the dictionary to make it easier to change the numerical value.
     
         for i in range(19):
-            key = json.dumps(data["responses"][0]["pc"]["pch"][2]["pch"][14]["pch"][i]["pn"]).strip('"')
-            val = json.dumps(data["responses"][0]["pc"]["pch"][2]["pch"][14]["pch"][i]["pv"])
+            key = json.dumps(data["responses"][0]["pc"]["pch"][3]["pch"][14]["pch"][i]["pn"]).strip('"')
+            val = json.dumps(data["responses"][0]["pc"]["pch"][3]["pch"][14]["pch"][i]["pv"])
             p[key] = val
 
         self.mode = "unknown"
@@ -53,6 +81,7 @@ class Daikin:
                 self.temperaturesp = int(p["p_1F"].strip('"'),16)
             case '"0500"':                
                 self.mode = "dry"
+                self.fanmode = self.get_fanmode(p["p_09"]) # Is this the right fan mode?
                 self.fan = self.get_fanmode(p["p_27"])                
         if e_A002[2] == '0': # Unit is turned off
             self.mode = "off"
@@ -153,7 +182,8 @@ class Daikin:
                 param = '{"requests": [{"op": 3,"to": "/dsiot/edge/adr_0100.dgc_status","pc": {"pn": "dgc_status","pch": [{"pn": "e_1002","pch": [{"pn": "e_A002","pch": [{"pn": "p_01","pv": '+e_A002+'}]},{"pn": "e_3003","pch": [{"pn": "p_2D","pv": '+e_3003+'}]},{"pn": "e_3001","pch": [{"pn": "p_01","pv": '+p["p_01"]+'},{"pn": "p_02","pv": '+p["p_02"]+'},{"pn": "p_05","pv": '+p["p_05"]+'},{"pn": "p_06","pv": '+p["p_06"]+'},{"pn": "p_09","pv": '+p["p_09"]+'}]}]}]}}]}'
             case '"0500"': #Dehumidifier mode
                 self.decode_mode(e_A002,e_3003,p)
-                param = '{"requests": [{"op": 3,"to": "/dsiot/edge/adr_0100.dgc_status","pc": {"pn": "dgc_status","pch": [{"pn": "e_1002","pch": [{"pn": "e_A002","pch": [{"pn": "p_01","pv": '+e_A002+'}]},{"pn": "e_3003","pch": [{"pn": "p_2D","pv": '+e_3003+'}]},{"pn": "e_3001","pch": [{"pn": "p_01","pv": '+p["p_01"]+'},{"pn": "p_22","pv": '+p["p_22"]+'},{"pn": "p_23","pv": '+p["p_23"]+'},{"pn": "p_27","pv": '+p["p_27"]+'},{"pn": "p_30","pv": '+p["p_30"]+'},{"pn": "p_31","pv": '+p["p_31"]+'}]}]}]}}]}'
+                #param = '{"requests": [{"op": 3,"to": "/dsiot/edge/adr_0100.dgc_status","pc": {"pn": "dgc_status","pch": [{"pn": "e_1002","pch": [{"pn": "e_A002","pch": [{"pn": "p_01","pv": '+e_A002+'}]},{"pn": "e_3003","pch": [{"pn": "p_2D","pv": '+e_3003+'}]},{"pn": "e_3001","pch": [{"pn": "p_01","pv": '+p["p_01"]+'},{"pn": "p_22","pv": '+p["p_22"]+'},{"pn": "p_23","pv": '+p["p_23"]+'},{"pn": "p_27","pv": '+p["p_27"]+'},{"pn": "p_30","pv": '+p["p_30"]+'},{"pn": "p_31","pv": '+p["p_31"]+'}]}]}]}}]}'
+                param = '{"requests": [{"op": 3,"to": "/dsiot/edge/adr_0100.dgc_status","pc": {"pn": "dgc_status","pch": [{"pn": "e_1002","pch": [{"pn": "e_A002","pch": [{"pn": "p_01","pv": '+e_A002+'}]},{"pn": "e_3003","pch": [{"pn": "p_2D","pv": '+e_3003+'}]},{"pn": "e_3001","pch": [{"pn": "p_01","pv": '+p["p_01"]+'},{"pn": "p_22","pv": '+p["p_22"]+'},{"pn": "p_23","pv": '+p["p_23"]+'},{"pn": "p_27","pv": '+p["p_27"]+'}]}]}]}}]}'
             case _:
                 print("Mode not there")
                 return
